@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<search> 
+  
+  
+    
+    <entry>
+      <title>使用spring+vue集成aop系统日志</title>
+      <link href="/2023/11/03/%E4%BD%BF%E7%94%A8spring+vue%E9%9B%86%E6%88%90aop%E7%B3%BB%E7%BB%9F%E6%97%A5%E5%BF%97/"/>
+      <url>/2023/11/03/%E4%BD%BF%E7%94%A8spring+vue%E9%9B%86%E6%88%90aop%E7%B3%BB%E7%BB%9F%E6%97%A5%E5%BF%97/</url>
+      
+        <content type="html"><![CDATA[<p>1.创建数据库表<br>create table logs(<br>id int(11) not null AUTO_INCREMENT,<br>operation VARCHAR(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT ‘操作名称’,<br>type VARCHAR(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT ‘操作类型’,<br>ip VARCHAR(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT ‘ip地址’,<br>user VARCHAR(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT ‘操作人’,<br>time VARCHAR(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT ‘操作时间’,<br>PRIMARY key(id)<br>)ENGINE&#x3D;INNODB DEFAULT CHARSET&#x3D;UTF8MB4  COLLATE&#x3D;utf8mb4_unicode_ci COMMENT&#x3D;’系统日志’;<br>2.导入aop依赖<br>&lt;dependency&gt;<br>    &lt;groupId&gt;org.springframework.boot&lt;&#x2F;groupId&gt;<br>    &lt;artifactId&gt;spring-boot-starter-aop&lt;&#x2F;artifactId&gt;<br>&lt;&#x2F;dependency&gt;<br>3.创建IpUtils类获取操作者的IP地址<br>package com.example.demo.utils;<br>import javax.servlet.http.HttpServlet;<br>import javax.servlet.http.HttpServletRequest;<br>&#x2F;&#x2F;获取IP地址<br>public class IpUtild {<br>   public static  String getIpAddr(HttpServletRequest request){<br>      String ip &#x3D; request.getHeader(“x-forwarded-for”);<br>      if(ip&#x3D;&#x3D;null||ip.length()&#x3D;&#x3D;0||”unknown”.equalsIgnoreCase(ip));<br>      {<br>         ip&#x3D;request.getHeader(“Proxy-Client-IP”);<br>      }<br>      if(ip&#x3D;&#x3D;null||ip.length()&#x3D;&#x3D;0||”unknown”.equalsIgnoreCase(ip));<br>      {<br>         ip&#x3D;request.getHeader(“X-Forwarded-For”);<br>      }<br>      if(ip&#x3D;&#x3D;null||ip.length()&#x3D;&#x3D;0||”unknown”.equalsIgnoreCase(ip));<br>      {<br>         ip&#x3D;request.getHeader(“WL-Proxy-Client-IP”);<br>      }<br>      if(ip&#x3D;&#x3D;null||ip.length()&#x3D;&#x3D;0||”unknown”.equalsIgnoreCase(ip));<br>      {<br>         ip&#x3D;request.getHeader(“X-Real-IP”);<br>      }<br>      if(ip&#x3D;&#x3D;null||ip.length()&#x3D;&#x3D;0||”unknown”.equalsIgnoreCase(ip));<br>      {<br>         ip&#x3D;request.getRemoteAddr();<br>      }<br>return “0:0:0:0:0:0:0:1”.equals(ip)? “127.0.0.1”:ip;<br>   }<br>}<br>4.创建注解和日志的操作类型枚举<br>4.1注解<br>package com.example.demo.common;<br>import java.lang.annotation.*;<br>@Target(ElementType.METHOD)<br>@Retention(RetentionPolicy.RUNTIME)<br>@Documented<br>public @interface HoneyLogs {<br>&#x2F;&#x2F;操作的模块<br>   String operation();<br>   &#x2F;&#x2F;操作类型<br>   LogType type();}<br>4.2枚举<br>package com.example.demo.common;<br>&#x2F;&#x2F;系统日志的操作类型枚举<br>public enum LogType {<br>ADD(“新增”),UPDATE(“修改”),DELETE(“删除”),LOGIN(“登录”),REGISTER(“注册”);<br>private  String value;<br>   LogType(String value) {<br>      this.value &#x3D; value;}<br>public String getValue() {<br>      return value;   }<br>      }<br>5.写好对应的mapper，service和controller<br>6.创建切面类<br>package com.example.demo.service.aop;<br>import cn.hutool.core.date.DateUtil;<br>import cn.hutool.core.thread.ThreadUtil;<br>import cn.hutool.core.util.ArrayUtil;<br>import com.example.demo.common.HoneyLogs;<br>import com.example.demo.entity.Logs;<br>import com.example.demo.entity.User;<br>import com.example.demo.service.Logs.LogsServiceImpl;<br>import com.example.demo.utils.IpUtild;<br>import com.example.demo.utils.TokenUtils;<br>import lombok.extern.slf4j.Slf4j;<br>import org.aspectj.lang.JoinPoint;<br>import org.aspectj.lang.annotation.AfterReturning;<br>import org.aspectj.lang.annotation.Aspect;<br>import org.springframework.stereotype.Component;<br>import org.springframework.web.context.request.RequestAttributes;<br>import org.springframework.web.context.request.RequestContextHolder;<br>import org.springframework.web.context.request.ServletRequestAttributes;<br>import javax.annotation.Resource;<br>import javax.servlet.http.HttpServletRequest;<br>@Component<br>@Aspect<br>@Slf4j<br>public class LogsAspect {<br>   @Resource<br>   LogsServiceImpl logsService;<br>   @AfterReturning(pointcut &#x3D; “@annotation(honeyLogs)”, returning &#x3D; “jsonResult”)<br>   public void recoredLog(JoinPoint joinPoint, HoneyLogs honeyLogs, Object jsonResult) {<br>      User loginUser &#x3D; TokenUtils.getCurrentUser();<br>      if (loginUser &#x3D;&#x3D; null) {<br>         &#x2F;&#x2F;登陆注册<br>         Object[] args &#x3D; joinPoint.getArgs();<br>         if (ArrayUtil.isNotEmpty(args)) {<br>            if (args[0] instanceof User) {<br>               loginUser &#x3D; (User) args[0];  } }  }<br>      if (loginUser &#x3D;&#x3D; null) {<br> log.error(“记录日志信息报错，未获取到当前操作用户信息”);<br>        return;<br>      }<br>&#x2F;&#x2F;获取HttpServletRequest对象<br>      ServletRequestAttributes requestAttributes &#x3D; (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();<br>      HttpServletRequest request &#x3D; requestAttributes.getRequest();<br>&#x2F;&#x2F;获取ip信息<br>String ipAddr &#x3D; IpUtild.getIpAddr(request);<br>&#x2F;&#x2F;组装日志的实体对象<br>Logs logs &#x3D; Logs.builder()<br>     .user(loginUser.getUsername())<br>     .type(honeyLogs.type().getValue())<br>     .operation(honeyLogs.operation())<br>     .ip(ipAddr)<br>     .time(DateUtil.now()).build();<br>&#x2F;&#x2F;插入数据库<br>&#x2F;&#x2F;异步插入数据库<br>    ThreadUtil.execAsync(() -&gt; {<br>         logsService.save(logs); });}<br>         }<br>7.使用时在对应的接口上添加注解<br>@HoneyLogs(operation &#x3D; “菜单管理”,type &#x3D; LogType.ADD)</p>]]></content>
+      
+      
+      <categories>
+          
+          <category> 全栈 </category>
+          
+      </categories>
+      
+      
+        <tags>
+            
+            <tag> 系统日志 </tag>
+            
+        </tags>
+      
+    </entry>
+    
+    
+    
+    <entry>
+      <title>解决前后端跨域问题</title>
+      <link href="/2023/11/02/%E8%A7%A3%E5%86%B3%E5%89%8D%E5%90%8E%E7%AB%AF%E8%B7%A8%E5%9F%9F%E9%97%AE%E9%A2%98/"/>
+      <url>/2023/11/02/%E8%A7%A3%E5%86%B3%E5%89%8D%E5%90%8E%E7%AB%AF%E8%B7%A8%E5%9F%9F%E9%97%AE%E9%A2%98/</url>
+      
+        <content type="html"><![CDATA[]]></content>
+      
+      
+      <categories>
+          
+          <category> 后端 </category>
+          
+      </categories>
+      
+      
+        <tags>
+            
+            <tag> 解决bug </tag>
+            
+        </tags>
+      
+    </entry>
+    
+    
+    
+    <entry>
+      <title>MybatisPlus的使用</title>
+      <link href="/2023/11/02/MybatisPlus%E7%9A%84%E4%BD%BF%E7%94%A8/"/>
+      <url>/2023/11/02/MybatisPlus%E7%9A%84%E4%BD%BF%E7%94%A8/</url>
+      
+        <content type="html"><![CDATA[<p>配置MyBatis-Plus<br>官方网站：<br>MyBatis-Plus (baomidou.com)<br>1.导入依赖<br>&lt;dependency&gt;<br>    &lt;groupId&gt;com.baomidou&lt;&#x2F;groupId&gt;<br>    &lt;artifactId&gt;mybatis-plus-boot-starter&lt;&#x2F;artifactId&gt;<br>    &lt;version&gt;3.5.1&lt;&#x2F;version&gt;<br>&lt;&#x2F;dependency&gt;</p>]]></content>
+      
+      
+      <categories>
+          
+          <category> 后端 </category>
+          
+      </categories>
+      
+      
+        <tags>
+            
+            <tag> 数据库框架 </tag>
+            
+        </tags>
+      
+    </entry>
+    
+    
+    
+    <entry>
+      <title>配置gitee仓库</title>
+      <link href="/2023/11/02/%E9%85%8D%E7%BD%AEgitee%E4%BB%93%E5%BA%93/"/>
+      <url>/2023/11/02/%E9%85%8D%E7%BD%AEgitee%E4%BB%93%E5%BA%93/</url>
+      
+        <content type="html"><![CDATA[<!-- 全局配置 --><p>全局配置<br>git config –global user.name “俞希恒”<br>git config –global user.email “<a href="mailto:&#x31;&#51;&#x33;&#54;&#x33;&#49;&#48;&#x32;&#x2b;&#121;&#x75;&#x2d;&#x78;&#x69;&#x68;&#101;&#x6e;&#103;&#x40;&#x75;&#x73;&#x65;&#114;&#x2e;&#110;&#x6f;&#x72;&#x65;&#112;&#108;&#x79;&#x2e;&#103;&#x69;&#x74;&#x65;&#101;&#46;&#99;&#x6f;&#x6d;">&#x31;&#51;&#x33;&#54;&#x33;&#49;&#48;&#x32;&#x2b;&#121;&#x75;&#x2d;&#x78;&#x69;&#x68;&#101;&#x6e;&#103;&#x40;&#x75;&#x73;&#x65;&#114;&#x2e;&#110;&#x6f;&#x72;&#x65;&#112;&#108;&#x79;&#x2e;&#103;&#x69;&#x74;&#x65;&#101;&#46;&#99;&#x6f;&#x6d;</a>“</p><p>1:cmd进入该项目<br>2:输入gitinit命令把这个目录变成一个git仓库<br>3:本地仓库提交到远程git remote add origin <a href="https://gitee.com/yu-xiheng/honey2024.git">https://gitee.com/yu-xiheng/honey2024.git</a><br>4:查看远程仓库git remote -v<br>5:新建.gitignore文件,在.gitignore文件里添加.idea;node_modules;*.iml<br>6:暂存代码git add .把当前目录除了.gitignore之外的所有文件全部加入到暂存区<br>7:git status可以查看文件<br>8:提交文件到本地仓库git commit -m ‘命名’<br>9:推送代码到远程仓库git push -u origin “master”</p>]]></content>
+      
+      
+      <categories>
+          
+          <category> 后端 </category>
+          
+      </categories>
+      
+      
+        <tags>
+            
+            <tag> 协同开发 </tag>
+            
+        </tags>
+      
+    </entry>
+    
+    
+  
+  
+</search>
